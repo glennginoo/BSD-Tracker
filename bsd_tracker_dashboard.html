@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BSD Tracker - Ticket Management & Aging Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            bsd: {
+              50: '#fdf2f8',
+              100: '#fce7f3',
+              700: '#701a35',
+              800: '#581845',
+              900: '#3d0c2e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .table-sticky-header th {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body class="h-full font-sans text-slate-800 antialiased flex flex-col bg-slate-100">
+
+  <header class="bg-bsd-800 text-white shadow-md flex-none z-20">
+    <div class="max-w-full px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
+      
+      <!-- Brand Logo & Title -->
+      <div class="flex items-center gap-3">
+        <button class="text-slate-300 hover:text-white p-1 rounded-lg transition-colors">
+          <i class="ph ph-list text-2xl"></i>
+        </button>
+        <div class="flex items-center gap-2">
+          <div class="bg-bsd-700 p-1.5 rounded-lg border border-bsd-500/30 flex items-center justify-center">
+            <i class="ph ph-kanban text-xl text-pink-300"></i>
+          </div>
+          <div>
+            <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2 leading-none">
+              BSD Tracker
+              <span class="bg-bsd-900/60 text-xs text-pink-200 px-2 py-0.5 rounded-full font-normal border border-pink-500/20">Live</span>
+            </h1>
+            <p class="text-[11px] text-pink-200/70 leading-none mt-0.5">Ticket Management & Aging Dashboard</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Global Search Bar -->
+      <div class="flex-1 max-w-xl mx-4">
+        <div class="relative">
+          <i class="ph ph-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-lg"></i>
+          <input 
+            type="text" 
+            id="globalSearchInput"
+            placeholder="Search tickets by ID, creator, status, assignee, or keywords..."
+            class="w-full bg-bsd-900/50 text-white text-sm placeholder-slate-400 pl-10 pr-10 py-2 rounded-lg border border-bsd-700 focus:outline-none focus:ring-2 focus:ring-pink-400/50 transition-all"
+            oninput="handleSearch()"
+          >
+          <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-sm">
+            <i class="ph ph-x-circle-fill"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="flex items-center gap-3">
+        <button onclick="fetchLiveBsdTrackerData()" class="bg-bsd-900 hover:bg-bsd-700 text-pink-200 hover:text-white font-medium text-xs px-3.5 py-2 rounded-lg border border-pink-500/30 transition-all flex items-center gap-2">
+          <i class="ph ph-arrows-clockwise text-base" id="syncIcon"></i>
+          <span>Sync</span>
+        </button>
+        <button onclick="openNewTicketModal()" class="bg-pink-600 hover:bg-pink-500 text-white font-medium text-sm px-4 py-2 rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-2 border border-pink-400/30">
+          <i class="ph ph-plus-circle text-lg"></i>
+          <span>+ Add Ticket</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
+    
+    <!-- Summary Metrics Cards -->
+    <div class="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex-none shadow-xs">
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Total Tickets</p>
+            <h3 id="statTotal" class="text-xl font-bold text-slate-900 mt-0.5">0</h3>
+          </div>
+          <div class="p-2 bg-blue-50 text-blue-600 rounded-md">
+            <i class="ph ph-ticket text-xl"></i>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">In Progress</p>
+            <h3 id="statInProgress" class="text-xl font-bold text-blue-600 mt-0.5">0</h3>
+          </div>
+          <div class="p-2 bg-blue-100/60 text-blue-700 rounded-md">
+            <i class="ph ph-spinner-gap text-xl animate-spin"></i>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Awaiting Action</p>
+            <h3 id="statPending" class="text-xl font-bold text-amber-600 mt-0.5">0</h3>
+          </div>
+          <div class="p-2 bg-amber-50 text-amber-600 rounded-md">
+            <i class="ph ph-hourglass-high text-xl"></i>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Critical Aging (>3d)</p>
+            <h3 id="statCritical" class="text-xl font-bold text-rose-600 mt-0.5">0</h3>
+          </div>
+          <div class="p-2 bg-rose-50 text-rose-600 rounded-md">
+            <i class="ph ph-warning-circle text-xl"></i>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Resolved</p>
+            <h3 id="statResolved" class="text-xl font-bold text-emerald-600 mt-0.5">0</h3>
+          </div>
+          <div class="p-2 bg-emerald-50 text-emerald-600 rounded-md">
+            <i class="ph ph-check-circle text-xl"></i>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Avg Resolution</p>
+            <h3 id="statAvgTime" class="text-xl font-bold text-slate-700 mt-0.5">00.0h</h3>
+          </div>
+          <div class="p-2 bg-purple-50 text-purple-600 rounded-md">
+            <i class="ph ph-clock text-xl"></i>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-3 flex-none">
+      
+      <!-- Filter Tabs -->
+      <div class="flex items-center space-x-1 overflow-x-auto py-1 max-w-full text-xs font-medium" id="statusTabs">
+        <button onclick="setFilter('ALL')" class="filter-tab px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-800 text-white shadow-xs font-semibold whitespace-nowrap transition-all" data-status="ALL">
+          All Tickets <span id="countAll" class="ml-1 px-1.5 py-0.2 bg-slate-700 text-slate-200 rounded-full text-[10px]">0</span>
+        </button>
+        <button onclick="setFilter('In Progress')" class="filter-tab px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 whitespace-nowrap transition-all" data-status="In Progress">
+          In Progress <span id="countInProgress" class="ml-1 px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded-full text-[10px]">0</span>
+        </button>
+        <button onclick="setFilter('Clarified with Customer')" class="filter-tab px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 whitespace-nowrap transition-all" data-status="Clarified with Customer">
+          Clarified with... <span id="countClarified" class="ml-1 px-1.5 py-0.2 bg-sky-100 text-sky-700 rounded-full text-[10px]">0</span>
+        </button>
+        <button onclick="setFilter('Responded')" class="filter-tab px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 whitespace-nowrap transition-all" data-status="Responded">
+          Responded <span id="countResponded" class="ml-1 px-1.5 py-0.2 bg-indigo-100 text-indigo-700 rounded-full text-[10px]">0</span>
+        </button>
+        <button onclick="setFilter('Reassigned')" class="filter-tab px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 whitespace-nowrap transition-all" data-status="Reassigned">
+          Reassigned <span id="countReassigned" class="ml-1 px-1.5 py-0.2 bg-amber-100 text-amber-700 rounded-full text-[10px]">0</span>
+        </button>
+        <button onclick="setFilter('Resolved')" class="filter-tab px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 whitespace-nowrap transition-all" data-status="Resolved">
+          Resolved <span id="countResolved" class="ml-1 px-1.5 py-0.2 bg-emerald-100 text-emerald-700 rounded-full text-[10px]">0</span>
+        </button>
+      </div>
+
+      <!-- Aging Filter Controls -->
+      <div class="flex items-center gap-2 text-xs">
+        <label for="agingFilterSelect" class="text-slate-500 font-medium whitespace-nowrap">Filter Aging:</label>
+        <select id="agingFilterSelect" onchange="handleAgingFilterChange()" class="bg-slate-50 border border-slate-300 rounded-md px-2 py-1.5 text-slate-700 font-medium focus:ring-1 focus:ring-bsd-800 outline-none">
+          <option value="ALL">All Durations</option>
+          <option value="CRITICAL">⚠️ Critical (&gt; 3 Days No Reply)</option>
+          <option value="WARNING">⌛ Pending (1 - 3 Days)</option>
+          <option value="FRESH">🟢 Active / Fresh (&lt; 24 Hrs)</option>
+        </select>
+        <button onclick="resetFilters()" class="text-slate-500 hover:text-slate-800 p-1.5 rounded hover:bg-slate-100 transition-colors" title="Reset all filters">
+          <i class="ph ph-arrows-counter-clockwise text-base"></i>
+        </button>
+      </div>
+
+    </div>
+
+    <div class="flex-1 overflow-auto p-4 sm:p-6 bg-slate-100 relative">
+      <div class="bg-white rounded-xl shadow-xs border border-slate-200 overflow-hidden flex flex-col h-full">
+        
+        <div class="overflow-x-auto flex-1">
+          <table class="w-full text-left border-collapse table-sticky-header">
+            <thead>
+              <tr class="bg-bsd-800 text-white text-[11px] font-semibold tracking-wider uppercase select-none">
+                <th class="p-3 border-b border-bsd-900 w-12 text-center">#</th>
+                <th onclick="sortTable('ticketId')" class="p-3 border-b border-bsd-900 cursor-pointer hover:bg-bsd-700 transition-colors">
+                  <div class="flex items-center gap-1">
+                    <span>Ticket ID</span>
+                    <i class="ph ph-arrows-down-up opacity-60"></i>
+                  </div>
+                </th>
+                <th onclick="sortTable('creator')" class="p-3 border-b border-bsd-900 cursor-pointer hover:bg-bsd-700 transition-colors">
+                  <div class="flex items-center gap-1">
+                    <span>Ticket Creator</span>
+                    <i class="ph ph-arrows-down-up opacity-60"></i>
+                  </div>
+                </th>
+                <th onclick="sortTable('assignedTo')" class="p-3 border-b border-bsd-900 cursor-pointer hover:bg-bsd-700 transition-colors">
+                  <div class="flex items-center gap-1">
+                    <span>Assigned To</span>
+                    <i class="ph ph-arrows-down-up opacity-60"></i>
+                  </div>
+                </th>
+                <th onclick="sortTable('status')" class="p-3 border-b border-bsd-900 cursor-pointer hover:bg-bsd-700 transition-colors">
+                  <div class="flex items-center gap-1">
+                    <span>Status</span>
+                    <i class="ph ph-arrows-down-up opacity-60"></i>
+                  </div>
+                </th>
+                <th onclick="sortTable('process')" class="p-3 border-b border-bsd-900 cursor-pointer hover:bg-bsd-700 transition-colors">
+                  <div class="flex items-center gap-1">
+                    <span>Process</span>
+                    <i class="ph ph-arrows-down-up opacity-60"></i>
+                  </div>
+                </th>
+                <th onclick="sortTable('priority')" class="p-3 border-b border-bsd-900 cursor-pointer hover:bg-bsd-700 transition-colors">
+                  <div class="flex items-center gap-1">
+                    <span>Priority</span>
+                    <i class="ph ph-arrows-down-up opacity-60"></i>
+                  </div>
+                </th>
+                <th onclick="sortTable('dateStarted')" class="p-3 border-b border-bsd-900 cursor-pointer hover:bg-bsd-700 transition-colors">
+                  <div class="flex items-center gap-1">
+                    <span>Date Started</span>
+                    <i class="ph ph-arrows-down-up opacity-60"></i>
+                  </div>
+                </th>
+                
+                <th onclick="sortTable('durationMs')" class="p-3 border-b border-bsd-900 bg-bsd-900/80 text-pink-200 cursor-pointer hover:bg-bsd-700 transition-colors min-w-[210px]">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="flex items-center gap-1.5">
+                      <i class="ph ph-clock-countdown text-pink-300 text-sm"></i>
+                      <span>Ticket Duration / Aging</span>
+                    </span>
+                    <i class="ph ph-arrows-down-up text-xs opacity-80"></i>
+                  </div>
+                </th>
+
+                <th class="p-3 border-b border-bsd-900 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ticketTableBody" class="divide-y divide-slate-200 text-xs text-slate-700 font-normal">
+              <!-- Dynamically populated via JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <div id="emptyState" class="hidden flex-1 flex flex-col items-center justify-center p-12 text-center">
+          <div class="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-3">
+            <i class="ph ph-magnifying-glass text-3xl"></i>
+          </div>
+          <h3 class="text-base font-semibold text-slate-800">No matching tickets found</h3>
+          <p class="text-slate-500 text-xs mt-1 max-w-sm">Try relaxing your search terms or clearing status filters to view records.</p>
+          <button onclick="resetFilters()" class="mt-4 px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-medium hover:bg-slate-700 transition-colors">
+            Reset All Filters
+          </button>
+        </div>
+
+        <div class="bg-slate-50 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between text-xs text-slate-500">
+          <div id="tableInfo">Showing 0 of 0 tickets</div>
+          <div class="flex items-center gap-2">
+            <span class="text-slate-400">Live Duration Based on BSD Tracker Dashboard</span>
+            <div class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Add New Ticket Modal -->
+  <div id="addTicketModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl border border-slate-200 max-w-2xl w-full overflow-hidden transform transition-all">
+      <div class="bg-bsd-800 text-white px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="ph ph-plus-circle text-pink-300 text-xl"></i>
+          <h3 class="font-bold text-base">Add SR Ticket</h3>
+        </div>
+        <button onclick="closeNewTicketModal()" class="text-slate-300 hover:text-white p-1 rounded">
+          <i class="ph ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <form id="newTicketForm" onsubmit="handleCreateTicket(event)" class="p-6 space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Service Request ID *</label>
+            <input type="text" id="inputSrNumber" required placeholder="e.g., SR0524739" class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-bsd-800 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Initial Status</label>
+            <select id="inputStatus" class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-bsd-800 outline-none">
+              <option value="In Progress">In Progress</option>
+              <option value="Clarified with Customer">Clarified with Customer</option>
+              <option value="Responded">Responded</option>
+              <option value="Reassigned">Reassigned</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Ticket Creator *</label>
+            <input type="text" id="inputCreator" required placeholder="e.g.,Glenn V. Ginoo" class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-bsd-800 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Assigned To</label>
+            <input type="text" id="inputAssigned" placeholder="e.g., Unassigned" class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-bsd-800 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Process Domain *</label>
+            <select id="inputProcess" class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-bsd-800 outline-none">
+              <option value="Booking/Doc">Booking / Documentation</option>
+              <option value="OPUS">OPUS / Container</option>
+              <option value="Rate Filing">Rate Filing</option>
+              <option value="Accounts Receive">Accounts Receivable</option>
+              <option value="Equipment Mgmt">Equipment Management</option>
+              <option value="Demurrage/Det">Demurrage & Detention</option>
+              <option value="Out of Scope">Out of Scope</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Priority Level</label>
+            <select id="inputPriority" class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-bsd-800 outline-none">
+              <option value="Low">Low Priority</option>
+              <option value="Medium">Medium Priority</option>
+              <option value="High">High Priority</option>
+              <option value="Critical">Critical Issue</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Short Description *</label>
+          <input type="text" id="inputShortDesc" required placeholder="e.g., Invoice GB2289242 is raised with incorrect total" class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-bsd-800 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Detailed Description / Instructions</label>
+          <textarea id="inputDetailedDesc" rows="3" placeholder="Provide extra background details or step-by-step issue replication instructions..." class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-bsd-800 outline-none"></textarea>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+          <button type="button" onclick="closeNewTicketModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 text-xs font-medium hover:bg-slate-100 transition-colors">
+            Cancel
+          </button>
+          <button type="submit" class="px-5 py-2 bg-bsd-800 text-white rounded-lg text-xs font-medium hover:bg-bsd-700 transition-colors shadow-sm">
+            Create Ticket
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Ticket Detail Modal -->
+  <div id="detailModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-4xl w-full overflow-hidden transform transition-all">
+      <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span id="detailSrBadge" class="bg-bsd-800 text-pink-200 text-xs px-2.5 py-1 rounded font-mono font-bold">SR0000000</span>
+          <h3 id="detailTicketId" class="font-bold text-base">Ticket Details</h3>
+        </div>
+        <button onclick="closeDetailModal()" class="text-slate-400 hover:text-white p-1 rounded">
+          <i class="ph ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-6">
+        <div id="detailAgingBanner" class="p-3.5 rounded-lg border flex items-center justify-between"></div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200 text-xs">
+          <div>
+            <span class="text-slate-400 block font-medium">Ticket Creator</span>
+            <span id="detailCreator" class="font-semibold text-slate-800">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-medium">Assigned To</span>
+            <span id="detailAssigned" class="font-semibold text-slate-800">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-medium">Process Domain</span>
+            <span id="detailProcess" class="font-semibold text-slate-800">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-medium">Priority</span>
+            <span id="detailPriority" class="font-semibold text-slate-800">--</span>
+          </div>
+        </div>
+
+        <div class="bg-pink-50/50 border border-pink-100 p-4 rounded-lg flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h4 class="text-xs font-bold text-slate-800">Update Ticket Status</h4>
+            <p class="text-[11px] text-slate-500">Changing status to 'Resolved' freezes the duration timestamp.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="detailStatusSelect" class="text-xs p-2 border border-slate-300 rounded-lg bg-white font-medium focus:ring-2 focus:ring-bsd-800 outline-none">
+              <option value="In Progress">In Progress</option>
+              <option value="Clarified with Customer">Clarified with Customer</option>
+              <option value="Responded">Responded</option>
+              <option value="Reassigned">Reassigned</option>
+              <option value="Resolved">Resolved</option>
+            </select>
+            <button onclick="updateCurrentTicketStatus()" class="px-3.5 py-2 bg-bsd-800 text-white rounded-lg text-xs font-semibold hover:bg-bsd-700 transition-colors shadow-xs">
+              Save Status
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <span class="text-slate-400 font-medium block mb-1 uppercase tracking-wider text-[10px]">Short Description</span>
+            <div id="detailShortDesc" class="p-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-800">--</div>
+          </div>
+          <div>
+            <span class="text-slate-400 font-medium block mb-1 uppercase tracking-wider text-[10px]">Detailed Description & Logs</span>
+            <div id="detailFullDesc" class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 whitespace-pre-line leading-relaxed min-h-[80px]">--</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 text-xs pt-2 border-t border-slate-200">
+          <div class="flex items-center gap-2 text-slate-500">
+            <i class="ph ph-calendar-plus text-base text-slate-400"></i>
+            <div>
+              <span class="block text-[10px] text-slate-400 uppercase font-medium">Date Started</span>
+              <span id="detailDateStarted" class="font-semibold text-slate-700">--</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-slate-500">
+            <i class="ph ph-check-circle text-base text-slate-400"></i>
+            <div>
+              <span class="block text-[10px] text-slate-400 uppercase font-medium">Date Resolved</span>
+              <span id="detailDateResolved" class="font-semibold text-slate-700">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-between items-center">
+        <span class="text-[11px] text-slate-400 font-medium">Database: BSD Tracker Monitoring</span>
+        <button onclick="closeDetailModal()" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-medium transition-colors">
+          Close Window
+        </button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script>
+    // Paste your Published Google Sheet CSV URL here
+    const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1l-JbgMOgv3vj-cA9Zm0rZM3tlYHWWDIREVREX2-u5P4/gviz/tq?tqx=out:csv&sheet=Tracker";
+
+    let rawTickets = [];
+    let currentFilter = 'ALL';
+    let currentAgingFilter = 'ALL';
+    let searchQuery = '';
+    let selectedTicket = null;
+    let currentSortColumn = 'durationMs';
+    let isSortAscending = false;
+
+    async function fetchLiveBsdTrackerData() {
+      const syncIcon = document.getElementById("syncIcon");
+      if (syncIcon) syncIcon.classList.add("animate-spin");
+
+      try {
+        const response = await fetch(GOOGLE_SHEET_CSV_URL);
+        const csvText = await response.text();
+
+        // Parse CSV data using PapaParse
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            rawTickets = normalizeSheetData(results.data);
+            applyFiltersAndRender();
+          }
+        });
+      } catch (err) {
+        console.error("Failed to fetch live sheet data:", err);
+      } finally {
+        if (syncIcon) syncIcon.classList.remove("animate-spin");
+      }
+    }
+
+    function normalizeSheetData(data) {
+      return data.map((row, index) => {
+        // Matches exact column headers from the BSD Tracker Google Sheet
+        const ticketId = row['Record'] || row['Ticket Creator'] || `SR${100000 + index}`;
+        const dateStarted = row['Service Request'] || row['Timestamp'] || new Date().toISOString();
+        
+        return {
+          id: ticketId,
+          ticketId: ticketId,
+          creator: row['Ticket Creator'] || 'System User',
+          assignedTo: row['Assigned To'] || row['Criterion1'] || 'Unassigned',
+          status: row['Status'] || 'In Progress',
+          process: row['Category'] || row['Criterion2'] || 'General Service',
+          priority: row['Priority'] || 'Medium',
+          shortDesc: row['Short Description'] || 'Downloaded SR Request Record',
+          fullDesc: row['Detailed Description'] || 'Imported automatically from SR Downloader.',
+          dateStarted: dateStarted,
+          dateResolved: row['Date Resolved'] || null,
+          durationMs: calculateDuration(dateStarted, row['Date Resolved'])
+        };
+      });
+    }
+
+    function calculateDuration(startDateStr, endDateStr) {
+      const start = new Date(startDateStr).getTime() || Date.now();
+      const end = endDateStr ? new Date(endDateStr).getTime() : Date.now();
+      return Math.max(0, end - start);
+    }
+
+    function formatDuration(ms) {
+      const hours = Math.floor(ms / (1000 * 60 * 60));
+      const days = Math.floor(hours / 24);
+      const remHours = hours % 24;
+      if (days > 0) return `${days}d ${remHours}h`;
+      return `${hours}h`;
+    }
+
+    function getAgingStatus(ms, status) {
+      if (status === 'Resolved') return { label: 'Resolved', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+      const days = ms / (1000 * 60 * 60 * 24);
+      if (days >= 3) return { label: '⚠️ Critical (>3 Days)', color: 'bg-rose-100 text-rose-800 border-rose-300' };
+      if (days >= 1) return { label: '⌛ Pending (1-3 Days)', color: 'bg-amber-100 text-amber-800 border-amber-300' };
+      return { label: '🟢 Fresh (<24 hrs)', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    }
+
+    function applyFiltersAndRender() {
+      let filtered = [...rawTickets];
+
+      if (currentFilter !== 'ALL') {
+        filtered = filtered.filter(t => t.status === currentFilter);
+      }
+
+      if (currentAgingFilter !== 'ALL') {
+        filtered = filtered.filter(t => {
+          const days = t.durationMs / (1000 * 60 * 60 * 24);
+          if (currentAgingFilter === 'CRITICAL') return days >= 3 && t.status !== 'Resolved';
+          if (currentAgingFilter === 'WARNING') return days >= 1 && days < 3 && t.status !== 'Resolved';
+          if (currentAgingFilter === 'FRESH') return days < 1 || t.status === 'Resolved';
+          return true;
+        });
+      }
+
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        filtered = filtered.filter(t => 
+          t.ticketId.toLowerCase().includes(q) ||
+          t.creator.toLowerCase().includes(q) ||
+          t.assignedTo.toLowerCase().includes(q) ||
+          t.status.toLowerCase().includes(q) ||
+          t.shortDesc.toLowerCase().includes(q)
+        );
+      }
+
+      filtered.sort((a, b) => {
+        let valA = a[currentSortColumn];
+        let valB = b[currentSortColumn];
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+
+        if (valA < valB) return isSortAscending ? -1 : 1;
+        if (valA > valB) return isSortAscending ? 1 : -1;
+        return 0;
+      });
+
+      renderTicketTable(filtered);
+      updateMetrics();
+    }
+
+    function sortTable(columnKey) {
+      if (currentSortColumn === columnKey) {
+        isSortAscending = !isSortAscending;
+      } else {
+        currentSortColumn = columnKey;
+        isSortAscending = true;
+      }
+      applyFiltersAndRender();
+    }
+
+    function renderTicketTable(tickets) {
+      const tbody = document.getElementById("ticketTableBody");
+      const emptyState = document.getElementById("emptyState");
+      const tableInfo = document.getElementById("tableInfo");
+
+      tbody.innerHTML = "";
+
+      if (tickets.length === 0) {
+        emptyState.classList.remove("hidden");
+        tableInfo.textContent = "Showing 0 of 0 tickets";
+        return;
+      }
+
+      emptyState.classList.add("hidden");
+      tableInfo.textContent = `Showing ${tickets.length} of ${rawTickets.length} tickets`;
+
+      tickets.forEach((t, i) => {
+        const aging = getAgingStatus(t.durationMs, t.status);
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-50 transition-colors border-b border-slate-200 cursor-pointer";
+        tr.onclick = () => openDetailModal(t);
+
+        tr.innerHTML = `
+          <td class="p-3 text-center text-slate-400 font-mono text-[11px]">${i + 1}</td>
+          <td class="p-3 font-semibold text-bsd-800 font-mono">${t.ticketId}</td>
+          <td class="p-3">${t.creator}</td>
+          <td class="p-3">${t.assignedTo}</td>
+          <td class="p-3"><span class="px-2 py-1 rounded-full text-[10px] font-semibold border ${getStatusColor(t.status)}">${t.status}</span></td>
+          <td class="p-3">${t.process}</td>
+          <td class="p-3"><span class="font-medium ${getPriorityColor(t.priority)}">${t.priority}</span></td>
+          <td class="p-3 text-slate-500">${new Date(t.dateStarted).toLocaleDateString()}</td>
+          <td class="p-3">
+            <span class="px-2 py-1 rounded text-[11px] font-semibold border ${aging.color}">
+              ${formatDuration(t.durationMs)} - ${aging.label}
+            </span>
+          </td>
+          <td class="p-3 text-right">
+            <button onclick="event.stopPropagation(); openDetailModal('${t.ticketId}')" class="text-bsd-800 hover:text-pink-600 font-semibold text-xs">View</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function getStatusColor(status) {
+      switch (status) {
+        case 'In Progress': return 'bg-blue-50 text-blue-700 border-blue-200';
+        case 'Clarified with Customer': return 'bg-sky-50 text-sky-700 border-sky-200';
+        case 'Responded': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+        case 'Reassigned': return 'bg-amber-50 text-amber-700 border-amber-200';
+        case 'Resolved': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        default: return 'bg-slate-100 text-slate-700 border-slate-200';
+      }
+    }
+
+    function getPriorityColor(priority) {
+      if (priority === 'Critical') return 'text-rose-600 font-bold';
+      if (priority === 'High') return 'text-amber-600 font-semibold';
+      return 'text-slate-600';
+    }
+
+    function updateMetrics() {
+      document.getElementById("statTotal").textContent = rawTickets.length;
+      document.getElementById("statInProgress").textContent = rawTickets.filter(t => t.status === 'In Progress').length;
+      document.getElementById("statPending").textContent = rawTickets.filter(t => t.status !== 'Resolved' && t.status !== 'In Progress').length;
+      document.getElementById("statCritical").textContent = rawTickets.filter(t => (t.durationMs / (1000 * 60 * 60 * 24)) >= 3 && t.status !== 'Resolved').length;
+      document.getElementById("statResolved").textContent = rawTickets.filter(t => t.status === 'Resolved').length;
+
+      document.getElementById("countAll").textContent = rawTickets.length;
+      document.getElementById("countInProgress").textContent = rawTickets.filter(t => t.status === 'In Progress').length;
+      document.getElementById("countClarified").textContent = rawTickets.filter(t => t.status === 'Clarified with Customer').length;
+      document.getElementById("countResponded").textContent = rawTickets.filter(t => t.status === 'Responded').length;
+      document.getElementById("countReassigned").textContent = rawTickets.filter(t => t.status === 'Reassigned').length;
+      document.getElementById("countResolved").textContent = rawTickets.filter(t => t.status === 'Resolved').length;
+
+      const resolved = rawTickets.filter(t => t.status === 'Resolved');
+      const avgMs = resolved.length ? resolved.reduce((acc, t) => acc + t.durationMs, 0) / resolved.length : 0;
+      document.getElementById("statAvgTime").textContent = `${(avgMs / (1000 * 60 * 60)).toFixed(1)}h`;
+    }
+
+    function setFilter(status) {
+      currentFilter = status;
+      document.querySelectorAll('.filter-tab').forEach(tab => {
+        if (tab.dataset.status === status) {
+          tab.className = "filter-tab px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-800 text-white shadow-xs font-semibold whitespace-nowrap transition-all";
+        } else {
+          tab.className = "filter-tab px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 whitespace-nowrap transition-all";
+        }
+      });
+      applyFiltersAndRender();
+    }
+
+    function handleAgingFilterChange() {
+      currentAgingFilter = document.getElementById("agingFilterSelect").value;
+      applyFiltersAndRender();
+    }
+
+    function handleSearch() {
+      searchQuery = document.getElementById("globalSearchInput").value;
+      document.getElementById("clearSearchBtn").classList.toggle("hidden", !searchQuery);
+      applyFiltersAndRender();
+    }
+
+    function clearSearch() {
+      document.getElementById("globalSearchInput").value = "";
+      searchQuery = "";
+      document.getElementById("clearSearchBtn").classList.add("hidden");
+      applyFiltersAndRender();
+    }
+
+    function resetFilters() {
+      currentFilter = 'ALL';
+      currentAgingFilter = 'ALL';
+      document.getElementById("agingFilterSelect").value = 'ALL';
+      clearSearch();
+      setFilter('ALL');
+    }
+
+    function openDetailModal(ticketOrId) {
+      const ticket = typeof ticketOrId === 'string' ? rawTickets.find(t => t.ticketId === ticketOrId) : ticketOrId;
+      if (!ticket) return;
+
+      selectedTicket = ticket;
+      document.getElementById("detailSrBadge").textContent = ticket.ticketId;
+      document.getElementById("detailTicketId").textContent = ticket.shortDesc;
+      document.getElementById("detailCreator").textContent = ticket.creator;
+      document.getElementById("detailAssigned").textContent = ticket.assignedTo;
+      document.getElementById("detailProcess").textContent = ticket.process;
+      document.getElementById("detailPriority").textContent = ticket.priority;
+      document.getElementById("detailStatusSelect").value = ticket.status;
+      document.getElementById("detailShortDesc").textContent = ticket.shortDesc;
+      document.getElementById("detailFullDesc").textContent = ticket.fullDesc;
+      document.getElementById("detailDateStarted").textContent = new Date(ticket.dateStarted).toLocaleString();
+      document.getElementById("detailDateResolved").textContent = ticket.dateResolved ? new Date(ticket.dateResolved).toLocaleString() : 'Not resolved yet';
+
+      const aging = getAgingStatus(ticket.durationMs, ticket.status);
+      document.getElementById("detailAgingBanner").className = `p-3.5 rounded-lg border flex items-center justify-between ${aging.color}`;
+      document.getElementById("detailAgingBanner").innerHTML = `
+        <span class="font-semibold text-xs">Aging / Duration: ${formatDuration(ticket.durationMs)}</span>
+        <span class="text-xs font-bold uppercase">${aging.label}</span>
+      `;
+
+      document.getElementById("detailModal").classList.remove("hidden");
+    }
+
+    function closeDetailModal() {
+      document.getElementById("detailModal").classList.add("hidden");
+    }
+
+    function updateCurrentTicketStatus() {
+      if (!selectedTicket) return;
+      const newStatus = document.getElementById("detailStatusSelect").value;
+      selectedTicket.status = newStatus;
+      if (newStatus === 'Resolved' && !selectedTicket.dateResolved) {
+        selectedTicket.dateResolved = new Date().toISOString();
+      }
+      applyFiltersAndRender();
+      closeDetailModal();
+    }
+
+    function openNewTicketModal() {
+      document.getElementById("addTicketModal").classList.remove("hidden");
+    }
+
+    function closeNewTicketModal() {
+      document.getElementById("addTicketModal").classList.add("hidden");
+    }
+
+    function handleCreateTicket(event) {
+      event.preventDefault();
+      const newTicket = {
+        id: document.getElementById("inputSrNumber").value,
+        ticketId: document.getElementById("inputSrNumber").value,
+        creator: document.getElementById("inputCreator").value,
+        assignedTo: document.getElementById("inputAssigned").value || 'Unassigned',
+        status: document.getElementById("inputStatus").value,
+        process: document.getElementById("inputProcess").value,
+        priority: document.getElementById("inputPriority").value,
+        shortDesc: document.getElementById("inputShortDesc").value,
+        fullDesc: document.getElementById("inputDetailedDesc").value,
+        dateStarted: new Date().toISOString(),
+        dateResolved: null,
+        durationMs: 0
+      };
+
+      rawTickets.unshift(newTicket);
+      applyFiltersAndRender();
+      closeNewTicketModal();
+      document.getElementById("newTicketForm").reset();
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      fetchLiveBsdTrackerData();
+      setInterval(fetchLiveBsdTrackerData, 30000); // Refresh every 30s
+    });
+  </script>
+  
+</body>
+</html>
